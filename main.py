@@ -63,7 +63,7 @@ def main():
     for i, pipl in enumerate(per_item_ppl):
         sentence_ppl_map[dataset["dev"][i]["text"]] = pipl
 
-    with open(f"{MODEL_NAME}.ppl.out", "w") as f:
+    with open(f"{MODEL_NAME.replace('/', '-')}.ppl.out", "w") as f:
         json.dump(sentence_ppl_map, f)
 
 main()

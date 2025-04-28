@@ -12,7 +12,7 @@ def eval_ppl(model, tokenizer, dataset):
 
     total_loss = 0.0
     total_tokens = 0
-    per_item_ppl = []
+    per_item_loss = []
     i = 0
     for example in dataset:
         try:
@@ -24,7 +24,7 @@ def eval_ppl(model, tokenizer, dataset):
             with torch.no_grad():
               outputs = model(input_ids, labels=input_ids)
             loss = outputs.loss
-            per_item_ppl.append(loss.item())
+            per_item_loss.append(loss.item())
 
             num_tokens = input_ids.numel()
             total_loss += loss.item() * num_tokens
@@ -37,7 +37,7 @@ def eval_ppl(model, tokenizer, dataset):
 
     avg_loss = total_loss / total_tokens
     perplexity = math.exp(avg_loss)
-    return perplexity, per_item_ppl
+    return perplexity, per_item_loss
 
 
 def main():
@@ -57,10 +57,10 @@ def main():
     DATASET_NAME = "dogtooth/default_project_dev_test"
     dataset = load_dataset(DATASET_NAME)
 
-    perplexity, per_item_ppl = eval_ppl(model, tokenizer, dataset["dev"])
+    perplexity, per_item_loss = eval_ppl(model, tokenizer, dataset["dev"])
     print(MODEL_NAME, ": Overall perplexity: ", perplexity)
     sentence_ppl_map = dict()
-    for i, pipl in enumerate(per_item_ppl):
+    for i, pipl in enumerate(per_item_loss):
         sentence_ppl_map[dataset["dev"][i]["text"]] = pipl
 
     with open(f"{MODEL_NAME.replace('/', '-')}.ppl.out", "w") as f:

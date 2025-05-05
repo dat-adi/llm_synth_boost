@@ -35,7 +35,7 @@ def tokenize_function(examples):
         examples["text"],
         truncation=True,
         padding="max_length",
-        max_length=1024,
+        max_length=512,
     )
     inputs["labels"] = inputs["input_ids"].copy()   # <- THIS LINE is critical
     return inputs
@@ -124,6 +124,7 @@ model = AutoModelForCausalLM.from_pretrained(
     load_in_4bit=True,
     torch_dtype=torch.float16,
 )
+model = set_up_model_for_qlora(model)
 
 # Load datasets
 train_dataset = load_dataset("JeanKaddour/minipile", split="train").shuffle(seed=42).select(range(5000))
@@ -136,7 +137,7 @@ training_args = TrainingArguments(
     output_dir="./qlora_output",
     per_device_train_batch_size=4,
     per_device_eval_batch_size=1,
-    gradient_accumulation_steps=8,
+    gradient_accumulation_steps=4,
     num_train_epochs=3,
     learning_rate=2e-4,
     fp16=True,

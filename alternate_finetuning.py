@@ -26,7 +26,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # Model and tokenizer setup
-model_id = "meta-llama/llama-3.1-8b"
+model_id = "meta-llama/Llama-3.1-8B"
 
 # Quantization config - using 8-bit to fit in 16GB RAM
 bnb_config = BitsAndBytesConfig(
@@ -101,7 +101,7 @@ data_collator = DataCollatorForLanguageModeling(
 # Define training arguments
 training_args = TrainingArguments(
     output_dir="./results",
-    evaluation_strategy="epoch",
+    eval_strategy="epoch",
     save_strategy="epoch",
     num_train_epochs=3,
     per_device_train_batch_size=2,  # Small batch size for memory efficiency

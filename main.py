@@ -39,6 +39,27 @@ def eval_ppl(model, tokenizer, dataset):
     perplexity = math.exp(avg_loss)
     return perplexity, per_item_loss
 
+def eval_llm():
+    MODEL_NAME = "/home/ec2-user/moepi/results/checkpoint-936"
+    tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME)
+    model = AutoModelForCausalLM.from_pretrained(
+        MODEL_NAME,
+        torch_dtype=torch.float16,
+        device_map="auto",
+        use_safetensors=True
+    )
+
+    DATASET_NAME = "dogtooth/default_project_dev_test"
+    dataset = load_dataset(DATASET_NAME)
+
+    perplexity, per_item_loss = eval_ppl(model, tokenizer, dataset["dev"])
+    print(MODEL_NAME, ": Overall perplexity: ", perplexity)
+    sentence_ppl_map = dict()
+    for i, pipl in enumerate(per_item_loss):
+        sentence_ppl_map[dataset["dev"][i]["text"]] = pipl
+
+    with open(f"{MODEL_NAME.replace('/', '-')}.ppl.out", "w") as f:
+        json.dump(sentence_ppl_map, f)
 
 def main():
     parser = argparse.ArgumentParser(description="Script that takes a model name")

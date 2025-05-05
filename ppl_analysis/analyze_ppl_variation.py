@@ -40,7 +40,7 @@ def get_largest_outliers(perplexities):
     
     return largest_outliers
 
-with open("./allenai-OLMoE-1B-7B-0924.ppl.out") as f:
+with open("./checkpoint-936.ppl.out") as f:
     contents = json.load(f)
 
 sentences = list(contents.keys())

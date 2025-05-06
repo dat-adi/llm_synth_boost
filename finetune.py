@@ -131,27 +131,41 @@ trainer = Trainer(
 print("Starting training...")
 train_result = trainer.train()
 
+# Print training metrics
+print("Training completed!")
+print(f"Training time: {train_result.metrics['train_runtime']:.2f} seconds")
+print(f"Training throughput: {train_result.metrics['train_samples_per_second']:.2f} samples/s")
+
+# Save the final model
+model.save_pretrained("./final_model")
+tokenizer.save_pretrained("./final_model")
+print("Model saved to ./final_model")
+
 # Get perplexity scores
 epochs = list(range(1, 4))  # 3 epochs
 perplexities = []
 
 # Calculate perplexity for each epoch
-for epoch in epochs:
-    checkpoint_dir = f"./results/checkpoint-{epoch * len(tokenized_train) // training_args.per_device_train_batch_size // training_args.gradient_accumulation_steps}"
-    if os.path.exists(checkpoint_dir):
-        # Load model from checkpoint
-        model = AutoModelForCausalLM.from_pretrained(
-            checkpoint_dir,
-            quantization_config=bnb_config,
-            device_map="auto",
-        )
-        # Evaluate
-        eval_results = trainer.evaluate()
-        perplexity = np.exp(eval_results["eval_loss"])
-        perplexities.append(perplexity)
-        print(f"Epoch {epoch}: Perplexity = {perplexity:.4f}")
-    else:
-        print(f"Checkpoint for epoch {epoch} not found.")
+try:
+    checkpoints = os.listdir("./checkpoints")
+    for i, epoch in enumerate(epochs):
+        if i < len(checkpoints):
+            checkpoint_dir = "./checkpoints/" + checkpoints[i]
+            # Load model from checkpoint
+            model = AutoModelForCausalLM.from_pretrained(
+                checkpoint_dir,
+                quantization_config=bnb_config,
+                device_map="auto",
+            )
+            # Evaluate
+            eval_results = trainer.evaluate()
+            perplexity = np.exp(eval_results["eval_loss"])
+            perplexities.append(perplexity)
+            print(f"Epoch {epoch}: Perplexity = {perplexity:.4f}")
+        else:
+            print(f"Checkpoint for epoch {epoch} not found.")
+except Exception as err:
+    print(err)
 
 try:
     # Plot perplexity vs epoch
@@ -166,15 +180,6 @@ try:
 except Exception as err:
     print(err)
 
-# Print training metrics
-print("Training completed!")
-print(f"Training time: {train_result.metrics['train_runtime']:.2f} seconds")
-print(f"Training throughput: {train_result.metrics['train_samples_per_second']:.2f} samples/s")
-
-# Save the final model
-model.save_pretrained("./final_model")
-tokenizer.save_pretrained("./final_model")
-print("Model saved to ./final_model")
 
 # Plot training loss from logs
 from tensorboard.backend.event_processing import event_accumulator

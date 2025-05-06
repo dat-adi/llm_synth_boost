@@ -5,7 +5,6 @@ import matplotlib.pyplot as plt
 from transformers import (
     AutoModelForCausalLM, 
     AutoTokenizer, 
-    OlmoeForCausalLM,
     BitsAndBytesConfig, 
     TrainingArguments,
     DataCollatorForLanguageModeling,
@@ -27,7 +26,7 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # Model and tokenizer setup
-model_id = "allenai/OLMoE-1B-7B-0924"
+model_id = "meta-llama/Llama-3.1-8B"
 
 # Quantization config - using 8-bit to fit in 16GB RAM
 bnb_config = BitsAndBytesConfig(
@@ -42,7 +41,7 @@ tokenizer = AutoTokenizer.from_pretrained(model_id)
 tokenizer.pad_token = tokenizer.eos_token
 
 # Load model with quantization
-model = OlmoeForCausalLM.from_pretrained(
+model = AutoModelForCausalLM.from_pretrained(
     model_id,
     quantization_config=bnb_config,
     device_map="auto",
@@ -103,7 +102,7 @@ data_collator = DataCollatorForLanguageModeling(
 
 # Define training arguments
 training_args = TrainingArguments(
-    output_dir="./checkpoints",
+    output_dir="./results",
     eval_strategy="epoch",
     save_strategy="epoch",
     num_train_epochs=3,
@@ -138,9 +137,9 @@ print(f"Training time: {train_result.metrics['train_runtime']:.2f} seconds")
 print(f"Training throughput: {train_result.metrics['train_samples_per_second']:.2f} samples/s")
 
 # Save the final model
-model.save_pretrained("./final_olmoe_model")
-tokenizer.save_pretrained("./final_olmoe_model")
-print("Model saved to ./final_olmoe_model")
+model.save_pretrained("./final_llama_3.1_model")
+tokenizer.save_pretrained("./final_llama_3.1_model")
+print("Model saved to ./final_llama_3.1_model")
 
 # Get perplexity scores
 epochs = list(range(1, 4))  # 3 epochs
@@ -153,7 +152,7 @@ try:
         if i < len(checkpoints):
             checkpoint_dir = "./checkpoints/" + checkpoints[i]
             # Load model from checkpoint
-            model = OlmoeForCausalLM.from_pretrained(
+            model = AutoModelForCausalLM.from_pretrained(
                 checkpoint_dir,
                 quantization_config=bnb_config,
                 device_map="auto",
@@ -180,7 +179,6 @@ try:
     plt.show()
 except Exception as err:
     print(err)
-
 
 # Plot training loss from logs
 from tensorboard.backend.event_processing import event_accumulator

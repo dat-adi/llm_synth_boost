@@ -4,6 +4,7 @@ import argparse
 from datasets import load_dataset
 import math
 import json
+from tqdm import tqdm
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 
@@ -51,14 +52,13 @@ def eval_model(MODEL_NAME):
     DATASET_NAME = "dogtooth/default_project_dev_test"
     dataset = load_dataset(DATASET_NAME)
 
-    perplexity, per_item_loss = eval_ppl(model, tokenizer, dataset["dev"])
+    perplexity, per_item_loss = eval_ppl(model, tokenizer, dataset["dev_test"])
 
-    if MODEL_NAME == "./final_model":
-        MODEL_NAME = "finetuned_model" # to prevent hidden json files
+    MODEL_NAME = f"finetuned_model_{MODEL_NAME}" # to prevent hidden json files
 
     print(MODEL_NAME, ": Overall perplexity: ", perplexity)
     sentence_ppl_map = dict()
-    for i, pipl in enumerate(per_item_loss):
+    for i, pipl in enumerate(tqdm(per_item_loss)):
         sentence_ppl_map[dataset["dev"][i]["text"]] = pipl
 
     with open(f"{MODEL_NAME.replace('/', '-')}.ppl.json", "w") as f:

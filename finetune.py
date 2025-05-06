@@ -65,12 +65,12 @@ model = get_peft_model(model, lora_config)
 print(f"Trainable parameters: {model.print_trainable_parameters()}")
 
 # Load datasets
-train_dataset = load_dataset("JeanKaddour/minipile", split="train")
-# train_dataset = load_dataset("csv", data_files="./data/synthetic_all.csv", split="train")
+# train_dataset = load_dataset("JeanKaddour/minipile", split="train")
+train_dataset = load_dataset("csv", data_files="./data/synthetic_all.csv", split="train")
 eval_dataset = load_dataset("dogtooth/default_project_dev_test", split="dev")
 
 # Sample 5000 examples from training dataset
-train_dataset = train_dataset.shuffle(seed=42).select(range(1000)) # pre-shuffled
+train_dataset = train_dataset.shuffle(seed=42).select(range(250)) # pre-shuffled
 # train_dataset = train_dataset.select(range(250))
 
 # Tokenization function

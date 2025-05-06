@@ -10,7 +10,7 @@ from transformers import (
     DataCollatorForLanguageModeling,
     Trainer
 )
-from datasets import load_dataset
+from datasets import load_dataset, load_from_disk
 from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
 # Set random seed for reproducibility
@@ -66,10 +66,12 @@ print(f"Trainable parameters: {model.print_trainable_parameters()}")
 
 # Load datasets
 train_dataset = load_dataset("JeanKaddour/minipile", split="train")
+# train_dataset = load_dataset("csv", data_files="./data/synthetic_all.csv", split="train")
 eval_dataset = load_dataset("dogtooth/default_project_dev_test", split="dev")
 
 # Sample 5000 examples from training dataset
-train_dataset = train_dataset.shuffle(seed=42).select(range(5000))
+train_dataset = train_dataset.shuffle(seed=42).select(range(1000)) # pre-shuffled
+# train_dataset = train_dataset.select(range(250))
 
 # Tokenization function
 def tokenize_function(examples):
@@ -151,15 +153,18 @@ for epoch in epochs:
     else:
         print(f"Checkpoint for epoch {epoch} not found.")
 
-# Plot perplexity vs epoch
-plt.figure(figsize=(10, 6))
-plt.plot(epochs, perplexities, marker='o')
-plt.title('Validation Perplexity vs. Epoch')
-plt.xlabel('Epoch')
-plt.ylabel('Perplexity')
-plt.grid(True)
-plt.savefig('perplexity_plot.png')
-plt.show()
+try:
+    # Plot perplexity vs epoch
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs, perplexities, marker='o')
+    plt.title('Validation Perplexity vs. Epoch')
+    plt.xlabel('Epoch')
+    plt.ylabel('Perplexity')
+    plt.grid(True)
+    plt.savefig('perplexity_plot.png')
+    plt.show()
+except Exception as err:
+    print(err)
 
 # Print training metrics
 print("Training completed!")
@@ -185,17 +190,39 @@ if log_files:
     ea.Reload()
     
     # Extract the training loss
-    if 'loss' in ea.scalars.Keys():
-        loss_events = ea.scalars.Items('loss')
-        steps = [event.step for event in loss_events]
-        losses = [event.value for event in loss_events]
-        
-        # Plot training loss
-        plt.figure(figsize=(10, 6))
-        plt.plot(steps, losses)
-        plt.title('Training Loss vs. Steps')
-        plt.xlabel('Steps')
-        plt.ylabel('Loss')
-        plt.grid(True)
-        plt.savefig('training_loss_plot.png')
-        plt.show()
+    if 'train/loss' in ea.scalars.Keys():
+        try:
+            loss_events = ea.scalars.Items('train/loss')
+            steps = [event.step for event in loss_events]
+            losses = [event.value for event in loss_events]
+            
+            # Plot training loss
+            plt.figure(figsize=(10, 6))
+            plt.plot(steps, losses)
+            plt.title('Training Loss vs. Steps')
+            plt.xlabel('Steps')
+            plt.ylabel('Loss')
+            plt.grid(True)
+            plt.savefig('training_loss_plot.png')
+            plt.show()
+        except Exception as err:
+            print("Could not retrieve training loss: ", err)
+
+    # Extract the evaluation loss
+    if 'eval/loss' in ea.scalars.Keys():
+        try:
+            loss_events = ea.scalars.Items('eval/loss')
+            steps = [event.step for event in loss_events]
+            losses = [event.value for event in loss_events]
+            
+            # Plot eval loss
+            plt.figure(figsize=(10, 6))
+            plt.plot(steps, losses)
+            plt.title('Evaluation Loss vs. Steps')
+            plt.xlabel('Steps')
+            plt.ylabel('Loss')
+            plt.grid(True)
+            plt.savefig('eval_loss_plot.png')
+            plt.show()
+        except Exception as err:
+            print("Could not retrieve training loss: ", err)

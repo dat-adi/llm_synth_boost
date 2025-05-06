@@ -19,12 +19,12 @@ if log_files:
         steps = [event.step for event in loss_events]
         losses = [event.value for event in loss_events]
         
-        # Plot training loss
+        # Plot evaling loss
         plt.figure(figsize=(10, 6))
         plt.plot(steps, losses)
-        plt.title('Evaluation Loss vs. Steps')
+        plt.title('Eval loss vs. steps')
         plt.xlabel('Steps')
         plt.ylabel('Loss')
         plt.grid(True)
-        plt.savefig('evaluation_loss_plot.png')
+        plt.savefig('eval_loss_plot.png')
         plt.show()

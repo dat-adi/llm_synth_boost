@@ -78,7 +78,7 @@ def tokenize_function(examples):
     return tokenizer(
         examples["text"],
         truncation=True,
-        max_length=512,  # Reduced context length for memory efficiency
+        max_length=1024,  # Reduced context length for memory efficiency
         padding="max_length",
     )
 

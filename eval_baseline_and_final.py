@@ -53,15 +53,15 @@ def eval_model(MODEL_NAME):
 
     perplexity, per_item_loss = eval_ppl(model, tokenizer, dataset["dev"])
 
-    if MODEL_NAME[0] == "/":
-        MODEL_NAME[0] = "" # to prevent weird file names
+    if MODEL_NAME == "./final_model":
+        MODEL_NAME = "finetuned_model" # to prevent hidden json files
 
     print(MODEL_NAME, ": Overall perplexity: ", perplexity)
     sentence_ppl_map = dict()
     for i, pipl in enumerate(per_item_loss):
         sentence_ppl_map[dataset["dev"][i]["text"]] = pipl
 
-    with open(f"{MODEL_NAME.replace('/', '-')}.ppl.out", "w") as f:
+    with open(f"{MODEL_NAME.replace('/', '-')}.ppl.json", "w") as f:
         json.dump(sentence_ppl_map, f)
 
 def main():
@@ -70,3 +70,5 @@ def main():
 
     FINETUNED_MODEL_NAME = "./final_model"
     eval_model(FINETUNED_MODEL_NAME)
+
+main()

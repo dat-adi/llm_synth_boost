@@ -1,0 +1,19 @@
+Using device: cuda
+trainable params: 2,252,800 || all params: 1,102,301,184 || trainable%: 0.2044
+Trainable parameters: None
+Starting training...
+{'loss': 2.1368, 'grad_norm': 0.08249405771493912, 'learning_rate': 0.00014731182795698925, 'epoch': 0.8}
+{'eval_loss': 2.362506628036499, 'eval_runtime': 199.8828, 'eval_samples_per_second': 10.006, 'eval_steps_per_second': 5.003, 'epoch': 1.0}
+{'loss': 2.1166, 'grad_norm': 0.08742066472768784, 'learning_rate': 9.35483870967742e-05, 'epoch': 1.59}
+{'eval_loss': 2.3630926609039307, 'eval_runtime': 199.883, 'eval_samples_per_second': 10.006, 'eval_steps_per_second': 5.003, 'epoch': 2.0}
+{'loss': 2.1207, 'grad_norm': 0.08307353407144547, 'learning_rate': 3.978494623655914e-05, 'epoch': 2.38}
+{'eval_loss': 2.3635435104370117, 'eval_runtime': 199.8484, 'eval_samples_per_second': 10.008, 'eval_steps_per_second': 5.004, 'epoch': 2.96}
+{'train_runtime': 1692.6341, 'train_samples_per_second': 1.772, 'train_steps_per_second': 0.11, 'train_loss': 2.1194627413185696, 'epoch': 2.96}
+Checkpoint for epoch 1 not found.
+Checkpoint for epoch 2 not found.
+Checkpoint for epoch 3 not found.
+x and y must have same first dimension, but have shapes (3,) and (0,)
+Training completed!
+Training time: 1692.63 seconds
+Training throughput: 1.77 samples/s
+Model saved to ./final_model

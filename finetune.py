@@ -1,170 +1,228 @@
+import os
 import torch
-import math
-
+import numpy as np
+import matplotlib.pyplot as plt
 from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer, Trainer,
-    TrainingArguments, TrainerCallback,
-    DataCollatorForLanguageModeling
+    AutoModelForCausalLM, 
+    AutoTokenizer, 
+    BitsAndBytesConfig, 
+    TrainingArguments,
+    DataCollatorForLanguageModeling,
+    Trainer
 )
-from peft import prepare_model_for_kbit_training, LoraConfig, get_peft_model
-from datasets import load_dataset
-from torch.utils.data import DataLoader
+from datasets import load_dataset, load_from_disk
+from peft import LoraConfig, get_peft_model, prepare_model_for_kbit_training
 
-def set_up_model_for_qlora(model):
-    """Set up the model for QLoRA"""
+# Set random seed for reproducibility
+def set_seed(seed):
+    np.random.seed(seed)
+    torch.manual_seed(seed)
+    torch.cuda.manual_seed_all(seed)
 
-    # Prepare for QLoRA
-    model = prepare_model_for_kbit_training(model)
+set_seed(42)
 
-    # Apply LoRA adapters
-    lora_config = LoraConfig(
-        r=8,
-        lora_alpha=32,
-        target_modules=["q_proj", "v_proj"],  # important for QLoRA
-        lora_dropout=0.05,
-        bias="none",
-        task_type="CAUSAL_LM",
-    )
-    model = get_peft_model(model, lora_config)
-
-    return model
-
-def tokenize_function(examples):
-    inputs = tokenizer(
-        examples["text"],
-        truncation=True,
-        padding="max_length",
-        max_length=512,
-    )
-    inputs["labels"] = inputs["input_ids"].copy()   # <- THIS LINE is critical
-    return inputs
-
-def compute_metrics(eval_pred):
-    logits, labels = eval_pred
-
-    # Convert to torch tensors
-    logits = torch.from_numpy(logits).float().to(device)  # (batch_size, seq_len, vocab_size)
-    labels = torch.from_numpy(labels).to(device)          # (batch_size, seq_len)
-
-    # Shift so that tokens <n> predict token <n+1>
-    shift_logits = logits[..., :-1, :].contiguous()  # (batch_size, seq_len-1, vocab_size)
-    shift_labels = labels[..., 1:].contiguous()      # (batch_size, seq_len-1)
-
-    # Flatten for loss computation
-    shift_logits = shift_logits.view(-1, shift_logits.size(-1))  # (total_tokens, vocab_size)
-    shift_labels = shift_labels.view(-1)                         # (total_tokens)
-
-    # Compute CrossEntropyLoss (ignoring pad tokens)
-    loss_fct = torch.nn.CrossEntropyLoss(ignore_index=tokenizer.pad_token_id, reduction='sum')
-    loss = loss_fct(shift_logits, shift_labels)
-
-    # Number of non-pad tokens
-    non_pad_tokens = (shift_labels != tokenizer.pad_token_id).sum()
-
-    avg_loss = (loss / non_pad_tokens).item()
-    perplexity = math.exp(avg_loss)
-
-    return {
-        'eval_loss': avg_loss,
-        'perplexity': perplexity,
-    }
-
-class PrintMetricsCallback(TrainerCallback):
-    def on_evaluate(self, args, state, control, metrics, **kwargs):
-        print(f"Step {state.global_step} (Eval): {metrics}")
-
-    def on_log(self, args, state, control, logs=None, **kwargs):
-        if logs is not None:
-            print(f"Step {state.global_step} (Train): {logs}")
-
-def evaluate_dataset(tokenizer, model, tokenized_eval_dataset):
-    pad_id = tokenizer.pad_token_id or tokenizer.eos_token_id
-    collator = DataCollatorForLanguageModeling(
-        tokenizer, mlm=False   # causal LM = next-token prediction
-    )
-
-    eval_loader = DataLoader(
-        tokenized_eval_dataset, batch_size=1,
-        shuffle=False, collate_fn=collator
-    )
-
-    model.eval()
-    total_loss = total_tokens = 0
-
-    with torch.no_grad():
-        for batch in eval_loader:
-            batch = {k: v.to(device) for k, v in batch.items()}
-            outputs = model(**batch)            # labels already included
-            loss = outputs.loss                 # mean NLL per token
-            token_count = batch["attention_mask"].sum().item()
-            total_loss  += loss.item() * token_count
-            total_tokens += token_count
-
-    avg_loss  = total_loss / total_tokens        # nats per token
-    perplexity = math.exp(avg_loss)
-    print(f"avg_loss={avg_loss:.4f}  perplexity={perplexity:.2f}")
-
-# Device
+# Check if CUDA is available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+print(f"Using device: {device}")
 
-# Model to fine-tune
-MODEL_NAME = "meta-llama/Llama-3.1-8B"
+# Model and tokenizer setup
+model_id = "meta-llama/Llama-3.1-8B"
+
+# Quantization config - using 8-bit to fit in 16GB RAM
+bnb_config = BitsAndBytesConfig(
+    load_in_8bit=True,
+    bnb_8bit_use_double_quant=True,
+    bnb_8bit_quant_type="nf4",
+    bnb_8bit_compute_dtype=torch.float16
+)
 
 # Load tokenizer
-tokenizer = AutoTokenizer.from_pretrained(MODEL_NAME, use_fast=True)
-# Add padding token if missing
-if tokenizer.pad_token is None:
-    tokenizer.pad_token = tokenizer.eos_token
+tokenizer = AutoTokenizer.from_pretrained(model_id)
+tokenizer.pad_token = tokenizer.eos_token
 
-# Load model in 4-bit
+# Load model with quantization
 model = AutoModelForCausalLM.from_pretrained(
-    MODEL_NAME,
+    model_id,
+    quantization_config=bnb_config,
     device_map="auto",
-    load_in_4bit=True,
-    torch_dtype=torch.float16,
 )
-model = set_up_model_for_qlora(model)
+
+# Prepare model for training with LoRA
+model = prepare_model_for_kbit_training(model)
+
+# Define LoRA configuration optimized for 16GB RAM
+lora_config = LoraConfig(
+    r=8,  # Lower rank for memory efficiency
+    lora_alpha=16,
+    target_modules=["q_proj", "k_proj", "v_proj", "o_proj"],
+    lora_dropout=0.05,
+    bias="none",
+    task_type="CAUSAL_LM"
+)
+
+# Apply LoRA to the model
+model = get_peft_model(model, lora_config)
+print(f"Trainable parameters: {model.print_trainable_parameters()}")
 
 # Load datasets
-train_dataset = load_dataset("JeanKaddour/minipile", split="train").shuffle(seed=42).select(range(5000))
-eval_dataset = load_dataset("dogtooth/default_project_dev_test", split="dev", keep_in_memory=False)
+train_dataset = load_dataset("JeanKaddour/minipile", split="train")
+# train_dataset = load_dataset("csv", data_files="./data/synthetic_all.csv", split="train")
+eval_dataset = load_dataset("dogtooth/default_project_dev_test", split="dev")
 
-tokenized_train_dataset = train_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
-tokenized_eval_dataset = eval_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
+# Sample 5000 examples from training dataset
+train_dataset = train_dataset.shuffle(seed=42).select(range(1000)) # pre-shuffled
+# train_dataset = train_dataset.select(range(250))
 
-training_args = TrainingArguments(
-    output_dir="./qlora_output",
-    per_device_train_batch_size=4,
-    per_device_eval_batch_size=1,
-    gradient_accumulation_steps=4,
-    num_train_epochs=3,
-    learning_rate=2e-4,
-    fp16=True,
-    # fp16_full_eval=True,
-    # prediction_loss_only=True, # MESSED UP EPOCH WISE PPL CALC
-    logging_steps=50,
-    save_steps=30,
-    eval_strategy="steps",    # (spelling)
-    eval_steps=30,
-    eval_accumulation_steps=4,     # optional: streams loss to CPU to save VRAM
-    save_total_limit=1,
-    report_to="none",
+# Tokenization function
+def tokenize_function(examples):
+    return tokenizer(
+        examples["text"],
+        truncation=True,
+        max_length=512,  # Reduced context length for memory efficiency
+        padding="max_length",
+    )
+
+# Tokenize datasets
+tokenized_train = train_dataset.map(
+    tokenize_function, 
+    batched=True, 
+    remove_columns=train_dataset.column_names
+)
+tokenized_eval = eval_dataset.map(
+    tokenize_function, 
+    batched=True, 
+    remove_columns=eval_dataset.column_names
 )
 
-# Setup Trainer
+# Data collator
+data_collator = DataCollatorForLanguageModeling(
+    tokenizer=tokenizer, 
+    mlm=False
+)
+
+# Define training arguments
+training_args = TrainingArguments(
+    output_dir="./results",
+    eval_strategy="epoch",
+    save_strategy="epoch",
+    num_train_epochs=3,
+    per_device_train_batch_size=2,  # Small batch size for memory efficiency
+    per_device_eval_batch_size=2,
+    gradient_accumulation_steps=8,  # Accumulate gradients to simulate larger batch
+    learning_rate=2e-4,
+    weight_decay=0.01,
+    fp16=True,  # Mixed precision training
+    logging_steps=50,  # Log every 50 steps
+    logging_dir="./logs",
+    report_to="tensorboard",
+    save_total_limit=2,  # Save only the last 2 checkpoints
+)
+
+# Create the trainer
 trainer = Trainer(
     model=model,
     args=training_args,
-    train_dataset=tokenized_train_dataset,
-    eval_dataset=tokenized_eval_dataset,
-    tokenizer=tokenizer,
-    compute_metrics=compute_metrics,
+    train_dataset=tokenized_train,
+    eval_dataset=tokenized_eval,
+    data_collator=data_collator,
 )
 
-trainer.train()
-evaluate_dataset(tokenizer, model, tokenized_eval_dataset)
+# Training with evaluation at each epoch
+print("Starting training...")
+train_result = trainer.train()
 
-test_dataset = load_dataset("dogtooth/default_project_dev_test", split="dev_test", keep_in_memory=False)
-tokenized_test_dataset = test_dataset.map(tokenize_function, batched=True, remove_columns=["text"])
-evaluate_dataset(tokenizer, model, tokenized_test_dataset)
+# Get perplexity scores
+epochs = list(range(1, 4))  # 3 epochs
+perplexities = []
+
+# Calculate perplexity for each epoch
+for epoch in epochs:
+    checkpoint_dir = f"./results/checkpoint-{epoch * len(tokenized_train) // training_args.per_device_train_batch_size // training_args.gradient_accumulation_steps}"
+    if os.path.exists(checkpoint_dir):
+        # Load model from checkpoint
+        model = AutoModelForCausalLM.from_pretrained(
+            checkpoint_dir,
+            quantization_config=bnb_config,
+            device_map="auto",
+        )
+        # Evaluate
+        eval_results = trainer.evaluate()
+        perplexity = np.exp(eval_results["eval_loss"])
+        perplexities.append(perplexity)
+        print(f"Epoch {epoch}: Perplexity = {perplexity:.4f}")
+    else:
+        print(f"Checkpoint for epoch {epoch} not found.")
+
+try:
+    # Plot perplexity vs epoch
+    plt.figure(figsize=(10, 6))
+    plt.plot(epochs, perplexities, marker='o')
+    plt.title('Validation Perplexity vs. Epoch')
+    plt.xlabel('Epoch')
+    plt.ylabel('Perplexity')
+    plt.grid(True)
+    plt.savefig('perplexity_plot.png')
+    plt.show()
+except Exception as err:
+    print(err)
+
+# Print training metrics
+print("Training completed!")
+print(f"Training time: {train_result.metrics['train_runtime']:.2f} seconds")
+print(f"Training throughput: {train_result.metrics['train_samples_per_second']:.2f} samples/s")
+
+# Save the final model
+model.save_pretrained("./final_model")
+tokenizer.save_pretrained("./final_model")
+print("Model saved to ./final_model")
+
+# Plot training loss from logs
+from tensorboard.backend.event_processing import event_accumulator
+import glob
+
+# Find the latest log file
+log_files = glob.glob("./logs/events.out.tfevents.*")
+if log_files:
+    latest_log = max(log_files, key=os.path.getctime)
+    
+    # Load the events
+    ea = event_accumulator.EventAccumulator(latest_log)
+    ea.Reload()
+    
+    # Extract the training loss
+    if 'train/loss' in ea.scalars.Keys():
+        try:
+            loss_events = ea.scalars.Items('train/loss')
+            steps = [event.step for event in loss_events]
+            losses = [event.value for event in loss_events]
+            
+            # Plot training loss
+            plt.figure(figsize=(10, 6))
+            plt.plot(steps, losses)
+            plt.title('Training Loss vs. Steps')
+            plt.xlabel('Steps')
+            plt.ylabel('Loss')
+            plt.grid(True)
+            plt.savefig('training_loss_plot.png')
+            plt.show()
+        except Exception as err:
+            print("Could not retrieve training loss: ", err)
+
+    # Extract the evaluation loss
+    if 'eval/loss' in ea.scalars.Keys():
+        try:
+            loss_events = ea.scalars.Items('eval/loss')
+            steps = [event.step for event in loss_events]
+            losses = [event.value for event in loss_events]
+            
+            # Plot eval loss
+            plt.figure(figsize=(10, 6))
+            plt.plot(steps, losses)
+            plt.title('Evaluation Loss vs. Steps')
+            plt.xlabel('Steps')
+            plt.ylabel('Loss')
+            plt.grid(True)
+            plt.savefig('eval_loss_plot.png')
+            plt.show()
+        except Exception as err:
+            print("Could not retrieve training loss: ", err)

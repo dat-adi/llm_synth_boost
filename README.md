@@ -41,6 +41,7 @@ convenience. Feel free to change it.
 Evaluated on the `dogtooth/default_project_dev_test`, the perplexities retrieved
 for various models are depicted below:
 | Model | Parameters | Perplexity | GPU Memory |
+| --- | --- | --- | --- |
 | TinyLlama-1.1B | 1.1B | 10.959 | 7GB |
 | Qwen2.5-3B | 3B | 10.344 | 12GB |
 | Llama-3.2-3B | 3B | 10.423 | 13GB |

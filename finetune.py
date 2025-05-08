@@ -20,13 +20,56 @@ def set_seed(seed):
     torch.cuda.manual_seed_all(seed)
 
 set_seed(42)
+def get_mixed_sampling_dataset():
+    from datasets import load_dataset, concatenate_datasets, Dataset
+    import pandas as pd
+
+    # 1) Load your base 5000‑row slice
+    train_dataset = (
+        load_dataset("JeanKaddour/minipile", split="train")       # MiniPile source  [oai_citation:0‡Hugging Face](https://huggingface.co/docs/datasets/en/loading?utm_source=chatgpt.com)
+        .shuffle(seed=42)                                         # deterministic shuffle
+        .select(range(750))
+    )
+
+    # 2) Load the merged CSV and keep only its text column
+    synthetic_dataset = (
+        load_dataset("csv", data_files="synthetic_all.csv", split="train")
+        .select_columns(["text"])              # retain only the text field
+    )
+
+    # 3) Append synthetic rows to the original MiniPile slice
+    augmented_dataset = concatenate_datasets([train_dataset, synthetic_dataset])
+
+    return augmented_dataset
+
+def get_mixed_sampling_dataset():
+    from datasets import load_dataset, concatenate_datasets, Dataset
+    import pandas as pd
+
+    # 1) Load your base 5000‑row slice
+    train_dataset = (
+        load_dataset("JeanKaddour/minipile", split="train")       # MiniPile source  [oai_citation:0‡Hugging Face](https://huggingface.co/docs/datasets/en/loading?utm_source=chatgpt.com)
+        .shuffle(seed=42)                                         # deterministic shuffle
+        .select(range(750))
+    )
+
+    # 2) Load the merged CSV and keep only its text column
+    synthetic_dataset = (
+        load_dataset("csv", data_files="synthetic_all.csv", split="train")
+        .select_columns(["text"])              # retain only the text field
+    )
+
+    # 3) Append synthetic rows to the original MiniPile slice
+    augmented_dataset = concatenate_datasets([train_dataset, synthetic_dataset])
+
+    return augmented_dataset
 
 # Check if CUDA is available
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print(f"Using device: {device}")
 
 # Model and tokenizer setup
-model_id = "meta-llama/Llama-3.1-8B"
+model_id = "TinyLlama/TinyLlama-1.1B-step-50K-105b"
 
 # Quantization config - using 8-bit to fit in 16GB RAM
 bnb_config = BitsAndBytesConfig(
@@ -65,13 +108,19 @@ model = get_peft_model(model, lora_config)
 print(f"Trainable parameters: {model.print_trainable_parameters()}")
 
 # Load datasets
+# Random Sampling
 # train_dataset = load_dataset("JeanKaddour/minipile", split="train")
-train_dataset = load_dataset("csv", data_files="./data/synthetic_all.csv", split="train")
-eval_dataset = load_dataset("dogtooth/default_project_dev_test", split="dev")
+# train_dataset = train_dataset.shuffle(seed=42).select(range(1000))
 
-# Sample 5000 examples from training dataset
+# Mixed Sampling
+# train_dataset = get_mixed_sampling_dataset()
+# train_dataset = train_dataset.shuffle(seed=42).select(range(1000))
+
+# Only Synthetic Sampling
+train_dataset = load_dataset("csv", data_files="./data/synthetic_all.csv", split="train")
 train_dataset = train_dataset.shuffle(seed=42).select(range(250)) # pre-shuffled
-# train_dataset = train_dataset.select(range(250))
+
+eval_dataset = load_dataset("dogtooth/default_project_dev_test", split="dev")
 
 # Tokenization function
 def tokenize_function(examples):

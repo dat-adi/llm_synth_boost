@@ -32,3 +32,10 @@ perplexity at a sentence wise level. It can be run as follows:
 ```bash
 python eval_baseline_and_final.py
 ```
+
+# Contributors
+
+This project was made possible by:
+- [@srikarbomm](https://github.com/srikarbomm)
+- [@SandeshRangreji](https://github.com/SandeshRangreji)
+- @dat-adi
